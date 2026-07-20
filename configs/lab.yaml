@@ -1,0 +1,34 @@
+# Single source of truth for the lab. All scripts read this.
+model_id: Qwen/Qwen3-4B
+
+paths:
+  models_dir: models/            # local, gitignored
+  results_csv: results/results.csv
+
+eval:
+  ppl_dataset: wikitext          # wikitext-2-raw-v1 test split
+  ppl_seq_len: 2048
+  ppl_stride: 512
+  tasks: [mmlu, gsm8k]
+  task_limit: 200                # per-task sample cap while iterating; null for final runs
+  gen_prompt: "Explain why quantization to 4 bits usually preserves model quality."
+  gen_tokens: 256
+
+hardware:
+  max_gpu_mem: "7GiB"            # 4070 mobile: leave headroom out of 8GB
+  max_cpu_mem: "24GiB"
+
+awq:
+  calib_samples: 128
+  variants:
+    - {w_bit: 4, q_group_size: 128}
+    - {w_bit: 4, q_group_size: 64}
+    - {w_bit: 3, q_group_size: 128}
+
+gptq:
+  w_bit: 4
+  group_size: 128
+
+prune:
+  method: wanda
+  sparsity: 0.5

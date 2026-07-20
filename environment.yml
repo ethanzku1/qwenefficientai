@@ -1,0 +1,19 @@
+name: efficientml
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - pip
+  - pip:
+      # PyTorch CUDA 12.1 wheels; on a CUDA-less machine pip falls back fine
+      - --extra-index-url https://download.pytorch.org/whl/cu121
+      - torch>=2.3
+      - transformers>=4.44
+      - accelerate
+      - datasets
+      - lm-eval>=0.4.4
+      - autoawq
+      - llmcompressor
+      - pandas
+      - tabulate
+      - pynvml

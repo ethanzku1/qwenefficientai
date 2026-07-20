@@ -1,0 +1,29 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "0: Check environment",
+      "type": "shell",
+      "command": "python scripts/00_check_env.py",
+      "problemMatcher": []
+    },
+    {
+      "label": "1: Baseline (BF16)",
+      "type": "shell",
+      "command": "python scripts/01_baseline.py",
+      "problemMatcher": []
+    },
+    {
+      "label": "3: AWQ (all variants)",
+      "type": "shell",
+      "command": "python scripts/03_quantize_awq.py",
+      "problemMatcher": []
+    },
+    {
+      "label": "Report: render results table",
+      "type": "shell",
+      "command": "python scripts/make_report.py",
+      "problemMatcher": []
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug: baseline",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "scripts/01_baseline.py",
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "name": "Debug: AWQ",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "scripts/03_quantize_awq.py",
+      "args": ["--only", "w4-g128"],
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}"
+    }
+  ]
+}

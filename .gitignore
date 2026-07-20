@@ -1,0 +1,29 @@
+# Model weights & heavy artifacts — never in git
+models/
+checkpoints/
+*.gguf
+*.safetensors
+*.bin
+*.pt
+*.pth
+
+# HF / tool caches
+.cache/
+hf_cache/
+wandb/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+
+# Notebooks: keep code, strip outputs (see .gitattributes note in README)
+.ipynb_checkpoints/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+
+# Keep results CSV and reports tracked; ignore raw dumps
+results/raw/
