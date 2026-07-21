@@ -39,7 +39,7 @@ def perplexity(model, tokenizer, cfg: dict) -> float:
     from datasets import load_dataset
 
     ecfg = cfg["eval"]
-    ds = load_dataset("wikitext", "wikitext-2-raw-v1", split="test")
+    ds = load_dataset("Salesforce/wikitext", "wikitext-2-raw-v1", split="test")
     text = "\n\n".join(ds["text"])
     enc = tokenizer(text, return_tensors="pt")
     input_ids = enc.input_ids
