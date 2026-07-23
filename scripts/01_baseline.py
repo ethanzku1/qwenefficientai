@@ -16,11 +16,16 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", default=None, help="override config model")
     parser.add_argument("--device", default=None, help="cpu or cuda")
+    parser.add_argument("--dryrun", action="store_true",
+        help="small/fast settings for CPU plumbing checks")
     args = parser.parse_args()
 
     cfg = M.load_config()
     model_id = args.model or cfg["model_id"]          # <-- override actually used
     hw = cfg["hardware"]
+    seq_len = 512 if args.dryrun else None      # None = use config value
+    max_windows = 8 if args.dryrun else None
+    dtype = torch.bfloat16
 
     use_cuda = (args.device or ("cuda" if torch.cuda.is_available() else "cpu")) == "cuda"
 
@@ -37,11 +42,12 @@ def main():
     else:
         model = AutoModelForCausalLM.from_pretrained(
             model_id,
-            dtype=torch.float32,   # CPU: bf16 is slow/flaky on many CPUs
+            dtype=torch.bfloat16 if args.dryrun else torch.float32,
         )
     model.eval()
+    model.config.use_cache = False
 
-    ppl = M.perplexity(model, tok, cfg)
+    ppl = M.perplexity(model, tok, cfg, seq_len=seq_len, max_windows=max_windows)
     tps = M.throughput(model, tok, cfg)
     vram = M.peak_vram_gb() if use_cuda else 0.0
 
@@ -49,11 +55,11 @@ def main():
     if use_cuda:
         torch.cuda.empty_cache()
 
-    tasks = M.run_lm_eval(model_id, cfg)
+    tasks = {} if args.dryrun else M.run_lm_eval(model_id, cfg)
 
     M.log_result(
         cfg,
-        config_name="baseline-bf16" if use_cuda else "baseline-cpu-dryrun",
+        config_name="baseline-cpu-dryrun" if args.dryrun else ("baseline-bf16" if use_cuda else "baseline-cpu"),
         method="none",
         bits=16,
         disk_gb="",  # HF cache; record quantized dirs from step 2 onward

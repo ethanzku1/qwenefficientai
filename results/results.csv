@@ -1,0 +1,2 @@
+timestamp,host,gpu,config_name,method,bits,disk_gb,peak_vram_gb,ppl_wikitext2,mmlu,gsm8k,tok_per_s,notes
+2026-07-23T14:57:00+00:00,EthansLaptop,cpu-only,baseline-cpu-dryrun,none,16,,0.0,30.186,,,6.8,CPU dry-run on Qwen/Qwen3-0.6B

@@ -34,7 +34,9 @@ def gpu_name() -> str:
 
 # ---------------------------------------------------------------- perplexity
 @torch.no_grad()
-def perplexity(model, tokenizer, cfg: dict) -> float:
+def perplexity(model, tokenizer, cfg: dict,
+               seq_len: int | None = None,
+               max_windows: int | None = None) -> float:
     """Sliding-window perplexity on WikiText-2 test."""
     from datasets import load_dataset
 
@@ -43,11 +45,13 @@ def perplexity(model, tokenizer, cfg: dict) -> float:
     text = "\n\n".join(ds["text"])
     enc = tokenizer(text, return_tensors="pt")
     input_ids = enc.input_ids
-    seq_len, stride = ecfg["ppl_seq_len"], ecfg["ppl_stride"]
+    seq_len = seq_len or ecfg["ppl_seq_len"]
+    stride = min(ecfg["ppl_stride"], seq_len)
     n_tokens = input_ids.size(1)
 
     nlls, counted = [], 0
     prev_end = 0
+    windows = 0
     device = next(model.parameters()).device
     for begin in range(0, n_tokens, stride):
         end = min(begin + seq_len, n_tokens)
@@ -59,7 +63,8 @@ def perplexity(model, tokenizer, cfg: dict) -> float:
         nlls.append(out.loss * trg_len)
         counted += trg_len
         prev_end = end
-        if end == n_tokens:
+        windows += 1
+        if end == n_tokens or (max_windows and windows >= max_windows):
             break
     return torch.exp(torch.stack(nlls).sum() / counted).item()
 
