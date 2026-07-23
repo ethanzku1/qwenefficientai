@@ -1,5 +1,4 @@
 timestamp,host,gpu,config_name,method,bits,disk_gb,peak_vram_gb,ppl_wikitext2,mmlu,gsm8k,tok_per_s,notes
 2026-07-23T14:57:00+00:00,EthansLaptop,cpu-only,baseline-cpu-dryrun,none,16,,0.0,30.186,,,6.8,CPU dry-run on Qwen/Qwen3-0.6B
-2026-07-23T20:43:02+00:00,dc-dgxc-demo-a4-7f9699fb8d-9tssx,NVIDIA A100-SXM4-80GB,baseline-bf16,none,16,,10.99,11.895,0.7136,0.875,5.1,device_map=auto (partial CPU offload on 8GB card)
 2026-07-23T21:13:54+00:00,EthansLaptop,cpu-only,rtn-w4-g128-dryrun,rtn,4,,0.0,36.498,,,6.9,"fake-quant, 196 linears, 0 per-channel fallback, CPU dry-run on Qwen/Qwen3-0.6B"
 2026-07-23T21:55:55+00:00,dc-dgxc-demo-a4-7f9699fb8d-9tssx,NVIDIA A100-SXM4-80GB,baseline-bf16,none,16,,11.8,11.895,0.7136,0.875,24.1,"device_map=auto, fully on GPU; max_gpu_mem=70GiB"
