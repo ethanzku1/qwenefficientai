@@ -18,6 +18,8 @@ def main():
     parser.add_argument("--device", default=None, help="cpu or cuda")
     parser.add_argument("--dryrun", action="store_true",
         help="small/fast settings for CPU plumbing checks")
+    parser.add_argument("--tag", default=None,
+        help="suffix appended to config_name, e.g. --tag gold -> baseline-bf16-gold")
     args = parser.parse_args()
 
     cfg = M.load_config()
@@ -25,7 +27,6 @@ def main():
     hw = cfg["hardware"]
     seq_len = 512 if args.dryrun else None      # None = use config value
     max_windows = 8 if args.dryrun else None
-    dtype = torch.bfloat16
 
     use_cuda = (args.device or ("cuda" if torch.cuda.is_available() else "cpu")) == "cuda"
 
@@ -36,7 +37,7 @@ def main():
         model = AutoModelForCausalLM.from_pretrained(
             model_id,
             dtype=torch.bfloat16,
-            device_map="auto",  # 4B in BF16 ~8GB: partially offloads on an 8GB card
+            device_map="auto",
             max_memory={0: hw["max_gpu_mem"], "cpu": hw["max_cpu_mem"]},
         )
     else:
@@ -48,8 +49,19 @@ def main():
     model.config.use_cache = False
 
     ppl = M.perplexity(model, tok, cfg, seq_len=seq_len, max_windows=max_windows)
+    model.config.use_cache = True
     tps = M.throughput(model, tok, cfg)
     vram = M.peak_vram_gb() if use_cuda else 0.0
+
+    if use_cuda:
+        devmap = getattr(model, "hf_device_map", None)
+        if devmap and any(v in ("cpu", "disk") for v in devmap.values()):
+            placement = "device_map=auto with partial CPU offload"
+        else:
+            placement = "device_map=auto, fully on GPU"
+        note = f"{placement}; max_gpu_mem={hw['max_gpu_mem']}"
+    else:
+        note = f"CPU dry-run on {model_id}" if args.dryrun else f"CPU run on {model_id}"
 
     del model
     if use_cuda:
@@ -57,9 +69,14 @@ def main():
 
     tasks = {} if args.dryrun else M.run_lm_eval(model_id, cfg)
 
+    config_name = ("baseline-cpu-dryrun" if args.dryrun
+            else ("baseline-bf16" if use_cuda else "baseline-cpu"))
+    if args.tag:
+        config_name += f"-{args.tag}"
+
     M.log_result(
         cfg,
-        config_name="baseline-cpu-dryrun" if args.dryrun else ("baseline-bf16" if use_cuda else "baseline-cpu"),
+        config_name=config_name,
         method="none",
         bits=16,
         disk_gb="",  # HF cache; record quantized dirs from step 2 onward
@@ -68,8 +85,7 @@ def main():
         mmlu=tasks.get("mmlu", ""),
         gsm8k=tasks.get("gsm8k", ""),
         tok_per_s=round(tps, 1),
-        notes="device_map=auto (partial CPU offload on 8GB card)" if use_cuda
-              else f"CPU dry-run on {model_id}",
+        notes=note,
     )
 
 
