@@ -17,7 +17,7 @@ import torch
 import yaml
 
 RESULT_FIELDS = [
-    "timestamp", "host", "gpu", "config_name", "method", "bits",
+    "timestamp", "host", "gpu","model", "config_name", "method", "bits",
     "disk_gb", "peak_vram_gb", "ppl_wikitext2",
     "mmlu", "gsm8k", "tok_per_s", "notes",
 ]
@@ -90,14 +90,15 @@ def throughput(model, tokenizer, cfg: dict) -> float:
 
 # ---------------------------------------------------------------- memory/disk
 def peak_vram_gb() -> float:
-    if not torch.cuda.is_available():
-        return 0.0
-    return torch.cuda.max_memory_allocated() / 1e9
-
+       if not torch.cuda.is_available():
+           return 0.0
+       return sum(torch.cuda.max_memory_allocated(d)
+                  for d in range(torch.cuda.device_count())) / 1e9
 
 def reset_vram_counter():
-    if torch.cuda.is_available():
-        torch.cuda.reset_peak_memory_stats()
+   if torch.cuda.is_available():
+       for d in range(torch.cuda.device_count()):
+           torch.cuda.reset_peak_memory_stats(d)
 
 
 def dir_size_gb(path: str | Path) -> float:
@@ -108,17 +109,25 @@ def dir_size_gb(path: str | Path) -> float:
 
 
 # ---------------------------------------------------------------- task evals
-def run_lm_eval(model_path: str, cfg: dict) -> dict:
-    """Run lm-eval harness; returns {task: acc}. Uses subprocess-free API."""
+def run_lm_eval(model_or_path, cfg: dict, tokenizer=None) -> dict:
+    """Run lm-eval harness; returns {task: acc}.
+
+    Accepts either a HF model id / local path (str) or an already-loaded
+    model object (pass tokenizer too in that case).
+    """
     import lm_eval
+    from lm_eval.models.huggingface import HFLM
 
     ecfg = cfg["eval"]
+    if isinstance(model_or_path, str):
+        lm = HFLM(pretrained=model_or_path, dtype="bfloat16", batch_size=1)
+    else:
+        lm = HFLM(pretrained=model_or_path, tokenizer=tokenizer, batch_size=1)
+
     res = lm_eval.simple_evaluate(
-        model="hf",
-        model_args=f"pretrained={model_path},dtype=bfloat16",
+        model=lm,
         tasks=ecfg["tasks"],
         limit=ecfg["task_limit"],
-        batch_size=1,
     )
     out = {}
     for task in ecfg["tasks"]:
@@ -126,7 +135,6 @@ def run_lm_eval(model_path: str, cfg: dict) -> dict:
         acc = metrics.get("acc,none") or metrics.get("exact_match,strict-match") or 0.0
         out[task] = round(float(acc), 4)
     return out
-
 
 # ---------------------------------------------------------------- results log
 def log_result(cfg: dict, **row):
@@ -136,6 +144,7 @@ def log_result(cfg: dict, **row):
     row.setdefault("timestamp", datetime.now(timezone.utc).isoformat(timespec="seconds"))
     row.setdefault("host", socket.gethostname() or platform.node())
     row.setdefault("gpu", gpu_name())
+    row.setdefault("model", cfg.get("model_id", ""))
     write_header = not path.exists()
     with open(path, "a", newline="") as f:
         w = csv.DictWriter(f, fieldnames=RESULT_FIELDS)

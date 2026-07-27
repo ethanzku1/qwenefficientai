@@ -1,11 +1,10 @@
-timestamp,host,gpu,config_name,method,bits,disk_gb,peak_vram_gb,ppl_wikitext2,mmlu,gsm8k,tok_per_s,notes
-2026-07-23T14:57:00+00:00,EthansLaptop,cpu-only,baseline-cpu-dryrun,none,16,,0.0,30.186,,,6.8,CPU dry-run on Qwen/Qwen3-0.6B
-2026-07-23T21:13:54+00:00,EthansLaptop,cpu-only,rtn-w4-g128-dryrun,rtn,4,,0.0,36.498,,,6.9,"fake-quant, 196 linears, 0 per-channel fallback, CPU dry-run on Qwen/Qwen3-0.6B"
-2026-07-23T21:55:55+00:00,dc-dgxc-demo-a4-7f9699fb8d-9tssx,NVIDIA A100-SXM4-80GB,baseline-bf16,none,16,,11.8,11.895,0.7136,0.875,24.1,"device_map=auto, fully on GPU; max_gpu_mem=70GiB"
-2026-07-24T18:04:01+00:00,dc-dgxc-demo-a4-7f9699fb8d-9tssx,NVIDIA A100-SXM4-80GB,rtn-w4-g128,rtn,4,,11.8,13.411,,,24.3,"fake-quant, 252 linears, 0 per-channel fallback"
-2026-07-24T18:07:58+00:00,dc-dgxc-demo-a4-7f9699fb8d-9tssx,NVIDIA A100-SXM4-80GB,rtn-w3-g128,rtn,3,,11.8,18.745,,,23.8,"fake-quant, 252 linears, 0 per-channel fallback"
-2026-07-24T18:40:45+00:00,dc-dgxc-demo-a4-7f9699fb8d-9tssx,NVIDIA A100-SXM4-80GB,rtn-w2-g128,rtn,2,,11.8,217095.094,,,24.4,"fake-quant, 252 linears, 0 per-channel fallback"
-2026-07-24T21:11:29+00:00,dc-dgxc-demo-a4-7f9699fb8d-9tssx,NVIDIA A100-SXM4-80GB,baseline-bf16-gold,none,16,,11.8,11.895,0.6824,0.8552,23.6,"device_map=auto, fully on GPU; max_gpu_mem=70GiB"
-2026-07-27T16:21:00+00:00,dc-dgxc-demo-a4-7f9699fb8d-9tssx,NVIDIA A100-SXM4-80GB,awq-w4-g128-0.6b-shakeout,awq,4,0.55,0.0,21.201,0.3437,0.31,18.4,fully on GPU shakeout
-2026-07-27T18:42:19+00:00,dc-dgxc-demo-a4-7f9699fb8d-9tssx,NVIDIA A100-SXM4-80GB,awq-w4-g128-0.6b-dup,awq,4,0.55,4.29,21.201,0.3444,0.305,18.6,fully on GPU
-2026-07-27T19:41:31+00:00,dc-dgxc-demo-a4-7f9699fb8d-9tssx,NVIDIA A100-SXM4-80GB,awq-w4-g128,awq,4,2.68,6.45,12.971,0.6974,0.835,14.1,fully on GPU
+timestamp,host,gpu,model,config_name,method,bits,disk_gb,peak_vram_gb,ppl_wikitext2,mmlu,gsm8k,tok_per_s,notes
+2026-07-23T14:57:00+00:00,EthansLaptop,cpu-only,Qwen/Qwen3-0.6B,baseline-cpu-dryrun,none,16,,0.0,30.186,,,6.8,CPU dry-run on Qwen/Qwen3-0.6B
+2026-07-23T21:13:54+00:00,EthansLaptop,cpu-only,Qwen/Qwen3-0.6B,rtn-w4-g128-dryrun,rtn,4,,0.0,36.498,,,6.9,"fake-quant, 196 linears, 0 per-channel fallback, CPU dry-run on Qwen/Qwen3-0.6B"
+2026-07-23T21:55:55+00:00,dc-dgxc-demo-a4-7f9699fb8d-9tssx,NVIDIA A100-SXM4-80GB,Qwen/Qwen3-4B,baseline-bf16,none,16,,11.8,11.895,0.7136,0.875,24.1,"device_map=auto, fully on GPU; max_gpu_mem=70GiB"
+2026-07-24T18:04:01+00:00,dc-dgxc-demo-a4-7f9699fb8d-9tssx,NVIDIA A100-SXM4-80GB,Qwen/Qwen3-4B,rtn-w4-g128,rtn,4,,11.8,13.411,,,24.3,"fake-quant, 252 linears, 0 per-channel fallback"
+2026-07-24T18:07:58+00:00,dc-dgxc-demo-a4-7f9699fb8d-9tssx,NVIDIA A100-SXM4-80GB,Qwen/Qwen3-4B,rtn-w3-g128,rtn,3,,11.8,18.745,,,23.8,"fake-quant, 252 linears, 0 per-channel fallback"
+2026-07-24T18:40:45+00:00,dc-dgxc-demo-a4-7f9699fb8d-9tssx,NVIDIA A100-SXM4-80GB,Qwen/Qwen3-4B,rtn-w2-g128,rtn,2,,11.8,217095.094,,,24.4,"fake-quant, 252 linears, 0 per-channel fallback"
+2026-07-24T21:11:29+00:00,dc-dgxc-demo-a4-7f9699fb8d-9tssx,NVIDIA A100-SXM4-80GB,Qwen/Qwen3-4B,baseline-bf16-gold,none,16,,11.8,11.895,0.6824,0.8552,23.6,"device_map=auto, fully on GPU; max_gpu_mem=70GiB"
+2026-07-27T16:21:00+00:00,dc-dgxc-demo-a4-7f9699fb8d-9tssx,NVIDIA A100-SXM4-80GB,Qwen/Qwen3-0.6B,awq-w4-g128-0.6b-shakeout,awq,4,0.55,0.0,21.201,0.3437,0.31,18.4,fully on GPU shakeout
+2026-07-27T19:41:31+00:00,dc-dgxc-demo-a4-7f9699fb8d-9tssx,NVIDIA A100-SXM4-80GB,Qwen/Qwen3-4B,awq-w4-g128,awq,4,2.68,6.45,12.971,0.6974,0.835,14.1,fully on GPU

@@ -18,15 +18,20 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from effml import measure as M
 
-
 def quantize_variant(cfg, w_bit: int, group: int) -> Path:
     from awq import AutoAWQForCausalLM
+    import shutil
 
     name = f"awq-w{w_bit}-g{group}"
-    out_dir = Path(cfg["paths"]["models_dir"]) / f"qwen3-4b-{name}"
-    if out_dir.exists():
-        print(f"[skip] {out_dir} already exists")
+    model_short = cfg["model_id"].split("/")[-1].lower()
+    out_dir = Path(cfg["paths"]["models_dir"]) / f"{model_short}-{name}"
+    done = out_dir / "DONE"
+    if done.exists():
+        print(f"[skip] {out_dir} already complete")
         return out_dir
+    if out_dir.exists():
+        print(f"[warn] {out_dir} exists but no DONE marker — partial dir, re-quantizing")
+        shutil.rmtree(out_dir)
 
     model = AutoAWQForCausalLM.from_pretrained(cfg["model_id"], safetensors=True)
     tok = AutoTokenizer.from_pretrained(cfg["model_id"])
@@ -42,25 +47,28 @@ def quantize_variant(cfg, w_bit: int, group: int) -> Path:
     out_dir.parent.mkdir(parents=True, exist_ok=True)
     model.save_quantized(str(out_dir))
     tok.save_pretrained(str(out_dir))
+    (out_dir / "DONE").touch()
     del model
     torch.cuda.empty_cache()
     return out_dir
 
 
 def evaluate_dir(cfg, model_dir: Path, name: str, w_bit: int):
+    from awq import AutoAWQForCausalLM
+    
     tok = AutoTokenizer.from_pretrained(model_dir)
     M.reset_vram_counter()
-    model = AutoModelForCausalLM.from_pretrained(
-        model_dir, torch_dtype=torch.float16, device_map="cuda:0"
-    )
+    awq_model = AutoAWQForCausalLM.from_quantized(str(model_dir), fuse_layers=False)
+    model = awq_model.model
     model.eval()
     ppl = M.perplexity(model, tok, cfg)
     tps = M.throughput(model, tok, cfg)
+    
+    tasks = M.run_lm_eval(model, cfg, tokenizer=tok)
     vram = M.peak_vram_gb()
-    del model
+    del model, awq_model
     torch.cuda.empty_cache()
 
-    tasks = M.run_lm_eval(str(model_dir), cfg)
     M.log_result(
         cfg,
         config_name=name,
