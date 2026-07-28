@@ -50,19 +50,29 @@ def get_calib(tok, nsamples: int, seqlen: int, seed: int = 0):
         texts = ["\n\n".join(ds["text"])]
 
     rng = random.Random(seed)
-    out = []
-    guard = 0
-    while len(out) < nsamples:
-        guard += 1
-        if guard > 20 * nsamples + 1000:
-            raise RuntimeError("calibration corpus has too few long documents")
-        enc = tok(texts[rng.randrange(len(texts))], return_tensors="pt")
-        n = enc.input_ids.shape[1]
-        if n <= seqlen + 1:
-            continue
-        i = rng.randrange(0, n - seqlen - 1)
-        out.append(enc.input_ids[:, i:i + seqlen])
-    return out, calib_name
+    order = list(range(len(texts)))
+    rng.shuffle(order)
+
+    # Pack: concatenate shuffled docs into a rolling buffer and slice fixed
+    # windows. C4's median doc is far shorter than 2048 tokens, so requiring
+    # one doc per window would both fail and bias toward atypical long docs.
+    out, buf, have = [], [], 0
+    for i in order:
+        ids = tok(texts[i], return_tensors="pt").input_ids[0]
+        buf.append(ids)
+        have += ids.numel()
+        if have >= seqlen:
+            cat = torch.cat(buf)
+            while cat.numel() >= seqlen and len(out) < nsamples:
+                out.append(cat[:seqlen].unsqueeze(0))
+                cat = cat[seqlen:]
+            buf, have = [cat], cat.numel()
+        if len(out) >= nsamples:
+            break
+
+    if len(out) < nsamples:
+        raise RuntimeError(f"only packed {len(out)}/{nsamples} calib windows")
+    return out, calib_name + "-packed"
 
 
 def main():
@@ -151,8 +161,13 @@ def main():
     # gptqmodel, which we don't install).
     tasks = {}
     if not args.dryrun and not args.skip_tasks:
-        tasks = M.run_lm_eval(model, tok, cfg)
-        print(f"[04] tasks: {tasks}")
+        try:
+            tasks = M.run_lm_eval(model, cfg)
+            print(f"[04] tasks: {tasks}")
+        except Exception as e:                      # noqa: BLE001
+            print(f"[04] lm_eval FAILED ({type(e).__name__}: {e}) "
+                  f"-- logging ppl/tps anyway")
+            tasks = {}
 
     del model
     if use_cuda:
