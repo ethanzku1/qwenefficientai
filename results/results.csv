@@ -11,3 +11,4 @@ timestamp,host,gpu,model,config_name,method,bits,disk_gb,peak_vram_gb,ppl_wikite
 2026-07-27T20:53:27+00:00,dc-dgxc-demo-a4-7f9699fb8d-9tssx,NVIDIA A100-SXM4-80GB,Qwen/Qwen3-4B,awq-w4-g64,awq,4,2.75,6.52,12.528,0.7021,0.84,14.2,fully on GPU
 2026-07-28T02:36:32+00:00,dc-dgxc-demo-a4-7f9699fb8d-9tssx,NVIDIA A100-SXM4-80GB,Qwen/Qwen3-4B,awq-w4-g32,awq,4,2.89,6.67,12.682,0.7106,0.835,14.3,fully on GPU
 2026-07-28T04:25:59+00:00,dc-dgxc-demo-a4-7f9699fb8d-9tssx,NVIDIA A100-SXM4-80GB,Qwen/Qwen3-4B,rtn-w4-g128-tasks,rtn,4,,11.8,13.411,0.6965,0.81,21.6,"fake-quant, 252 linears, 0 per-channel fallback"
+2026-07-28T04:39:37+00:00,dc-dgxc-demo-a4-7f9699fb8d-9tssx,NVIDIA A100-SXM4-80GB,Qwen/Qwen3-4B,gptq-w4-g128-dryrun,gptq,4,,9.72,23.48,,,21.7,"fake-quant, calib=c4 n=8 len=512, percdamp=0.01, no act_order, CPU dry-run on Qwen/Qwen3-4B"
