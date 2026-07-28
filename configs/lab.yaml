@@ -15,15 +15,15 @@ eval:
   gen_tokens: 256
 
 hardware:
-  max_gpu_mem: "7GiB"            # 4070 mobile: leave headroom out of 8GB
-  max_cpu_mem: "24GiB"
+  max_gpu_mem: "70GiB"        
+  max_cpu_mem: "70GiB"
 
 awq:
   calib_samples: 128
   variants:
     - {w_bit: 4, q_group_size: 128}
     - {w_bit: 4, q_group_size: 64}
-    - {w_bit: 3, q_group_size: 128}
+    - {w_bit: 4, q_group_size: 32}
 
 gptq:
   w_bit: 4

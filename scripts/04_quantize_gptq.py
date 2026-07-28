@@ -1,242 +1,183 @@
-"""Step 4: GPTQ W4 via llmcompressor (TODO).
-Mirror scripts/03: quantize -> evaluate_dir -> log_result(method="gptq")."""
-"""GPTQ fake-quantization, hand-rolled.
+"""Step 4: GPTQ INT4/INT3 fake-quant (Hessian-aware, error-compensating).
 
-No auto-gptq / gptqmodel dependency: quantization happens in-memory on the
-live model, exactly like 02's RTN pass, so the result is evaluated with the
-live-model path in measure.run_lm_eval (the same trick AWQ forced on us).
+Same measurement suite as 02; logs with method="gptq". Quantization is
+in-memory fake-quant -- no auto-gptq / gptqmodel, whose torch-pinned CUDA
+kernels would displace the pod's NGC torch 2.8.0. Consequence: disk_gb is
+blank and peak_vram_gb measures the BF16 container, exactly as for 02's RTN
+rows. The GPTQ-vs-AWQ comparison here is quality-at-matched-bits.
 
-Reference: Frantar et al., "GPTQ: Accurate Post-Training Quantization for
-Generative Pre-trained Transformers" (2022). Structure follows the original
-IST-DASLab implementation, simplified: no act_order, no packing, fp32 math.
-
-Drop at src/effml/gptq.py
+Algorithm lives in src/effml/gptq.py.
 """
+import sys
+from pathlib import Path
 
-import math
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+
+import argparse
+import random
 
 import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+from effml import measure as M
+from effml.gptq import gptq_quantize_model
 
 
-# --------------------------------------------------------------------------
-# shared quant grid  (identical math to 02's rtn_quantize_, factored out)
-# --------------------------------------------------------------------------
+def get_calib(tok, nsamples: int, seqlen: int, seed: int = 0):
+    """Calibration token windows.
 
-def find_qparams(W: torch.Tensor, n_bits: int = 4):
-    """Asymmetric min/max grid over the last dim.
-
-    W: (..., g) fp32. Returns (scale, zero), each (..., 1), broadcastable.
+    C4, deliberately: AWQ calibrated on pileval, and calibrating GPTQ on
+    wikitext2-train while reporting wikitext2 perplexity would hand GPTQ an
+    in-domain advantage and contaminate the comparison against awq-w4-g128.
+    Falls back to wikitext2 only if C4 can't be fetched -- the fallback is
+    recorded in the results notes so the contamination is never silent.
     """
-    w_max = W.amax(dim=-1, keepdim=True)
-    w_min = W.amin(dim=-1, keepdim=True)
-    qmax = 2 ** n_bits - 1
-    scale = (w_max - w_min).clamp(min=1e-8) / qmax
-    zero = (-w_min / scale).round()
-    return scale, zero
+    from datasets import load_dataset
+
+    calib_name = "c4"
+    try:
+        ds = load_dataset(
+            "allenai/c4",
+            data_files={"train": "en/c4-train.00000-of-01024.json.gz"},
+            split="train",
+        )
+        texts = ds["text"]
+    except Exception as e:                                    # noqa: BLE001
+        print(f"[04] C4 unavailable ({type(e).__name__}: {e}); "
+              f"falling back to wikitext2-train -- IN-DOMAIN, note it")
+        calib_name = "wikitext2-train-INDOMAIN"
+        ds = load_dataset("wikitext", "wikitext-2-raw-v1", split="train")
+        texts = ["\n\n".join(ds["text"])]
+
+    rng = random.Random(seed)
+    out = []
+    guard = 0
+    while len(out) < nsamples:
+        guard += 1
+        if guard > 20 * nsamples + 1000:
+            raise RuntimeError("calibration corpus has too few long documents")
+        enc = tok(texts[rng.randrange(len(texts))], return_tensors="pt")
+        n = enc.input_ids.shape[1]
+        if n <= seqlen + 1:
+            continue
+        i = rng.randrange(0, n - seqlen - 1)
+        out.append(enc.input_ids[:, i:i + seqlen])
+    return out, calib_name
 
 
-def quant_dequant(W: torch.Tensor, scale, zero, n_bits: int) -> torch.Tensor:
-    qmax = 2 ** n_bits - 1
-    Wq = (W / scale + zero).round().clamp(0, qmax)
-    return (Wq - zero) * scale
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--model", default=None, help="override config model")
+    parser.add_argument("--device", default=None, help="cpu or cuda")
+    parser.add_argument("--dryrun", action="store_true",
+        help="small/fast settings for CPU plumbing checks")
+    parser.add_argument("--bits", type=int, default=4)
+    parser.add_argument("--group-size", type=int, default=128)
+    parser.add_argument("--nsamples", type=int, default=None,
+        help="calibration windows (default 128, or 8 with --dryrun)")
+    parser.add_argument("--seqlen", type=int, default=None,
+        help="calibration window length (default 2048, or 512 with --dryrun)")
+    parser.add_argument("--percdamp", type=float, default=0.01,
+        help="Hessian dampening; raise to 0.05 if Cholesky fails")
+    parser.add_argument("--tag", default=None, help="suffix for config_name")
+    parser.add_argument("--skip-tasks", action="store_true",
+        help="skip lm_eval (dry-runs / quick plumbing checks)")
+    args = parser.parse_args()
 
+    cfg = M.load_config()
+    model_id = args.model or cfg["model_id"]
+    hw = cfg["hardware"]
+    seq_len = 512 if args.dryrun else None
+    max_windows = 8 if args.dryrun else None
 
-# --------------------------------------------------------------------------
-# per-Linear GPTQ state
-# --------------------------------------------------------------------------
+    nsamples = args.nsamples if args.nsamples is not None else (8 if args.dryrun else 128)
+    calib_seqlen = args.seqlen if args.seqlen is not None else (512 if args.dryrun else 2048)
 
-class GPTQ:
-    """Accumulates the Hessian for one Linear, then quantizes it in place."""
+    use_cuda = (args.device or ("cuda" if torch.cuda.is_available() else "cpu")) == "cuda"
 
-    def __init__(self, layer: torch.nn.Linear, n_bits: int = 4, group_size: int = 128):
-        self.layer = layer
-        self.n_bits = n_bits
-        self.group_size = group_size
+    tok = AutoTokenizer.from_pretrained(model_id)
 
-        W = layer.weight.data
-        self.rows, self.columns = W.shape
-        self.dev = W.device
-        # H is (in_features, in_features) fp32 -- the big memory item.
-        # Qwen3-4B down_proj: 9728^2 * 4B = 378 MB.
-        self.H = torch.zeros((self.columns, self.columns),
-                             device=self.dev, dtype=torch.float32)
-        self.nsamples = 0
+    if use_cuda:
+        M.reset_vram_counter()
+        # NB: device_map={"": 0}, NOT "auto". GPTQ walks decoder blocks
+        # sequentially, feeding block i's outputs into block i+1; if "auto"
+        # shards blocks across GPUs those activations land on the wrong
+        # device. The 4B in BF16 (~8GB) plus activation buffers (~3GB) fits
+        # one A100-80GB with room to spare.
+        model = AutoModelForCausalLM.from_pretrained(
+            model_id,
+            dtype=torch.bfloat16,
+            device_map={"": 0},
+            max_memory={0: hw["max_gpu_mem"]},
+        )
+    else:
+        model = AutoModelForCausalLM.from_pretrained(
+            model_id,
+            dtype=torch.bfloat16 if args.dryrun else torch.float32,
+        )
+    model.eval()
 
-    @torch.no_grad()
-    def add_batch(self, inp: torch.Tensor):
-        """inp: (..., in_features) activations entering this Linear."""
-        inp = inp.reshape(-1, inp.shape[-1]).t().float()   # (cols, n_tokens)
-        n = inp.shape[1]
-        # running mean of 2 * X X^T
-        self.H *= self.nsamples / (self.nsamples + n)
-        self.nsamples += n
-        inp = inp * math.sqrt(2.0 / self.nsamples)
-        self.H += inp.matmul(inp.t())
+    devs = {p.device for p in model.parameters()}
+    print(f"[04] model on {devs}")
+    if len(devs) > 1:
+        raise RuntimeError(f"GPTQ needs a single device, got {devs}")
 
-    @torch.no_grad()
-    def quantize(self, percdamp: float = 0.01, blocksize: int = 128) -> float:
-        """Quantize the weight in place. Returns the proxy loss (lower = better)."""
-        W = self.layer.weight.data.clone().float()
-        H = self.H
+    calib, calib_name = get_calib(tok, nsamples, calib_seqlen)
+    print(f"[04] calib: {nsamples} x {calib_seqlen} tokens from {calib_name}")
 
-        # dead input channels: nothing ever activated them, so their weights
-        # are unconstrained -- zero them and give H a unit diagonal entry.
-        dead = torch.diag(H) == 0
-        H[dead, dead] = 1
-        W[:, dead] = 0
+    # Quantizes every Linear inside the decoder blocks. lm_head is outside
+    # model.model.layers and so is never touched -- same reason as 02: Qwen3
+    # ties lm_head to the input embeddings.
+    gptq_quantize_model(
+        model,
+        calib,
+        n_bits=args.bits,
+        group_size=args.group_size,
+        percdamp=args.percdamp,
+    )
+    del calib
 
-        # dampening: keeps the Cholesky well-conditioned
-        damp = percdamp * torch.mean(torch.diag(H))
-        idx = torch.arange(self.columns, device=self.dev)
-        H[idx, idx] += damp
-
-        # Hinv as an upper-triangular Cholesky factor of H^-1
-        H = torch.linalg.cholesky(H)
-        H = torch.cholesky_inverse(H)
-        Hinv = torch.linalg.cholesky(H, upper=True)
-
-        Q = torch.zeros_like(W)
-        total_loss = 0.0
-        scale = zero = None
-
-        for i1 in range(0, self.columns, blocksize):
-            i2 = min(i1 + blocksize, self.columns)
-            count = i2 - i1
-
-            W1 = W[:, i1:i2].clone()
-            Q1 = torch.zeros_like(W1)
-            Err1 = torch.zeros_like(W1)
-            Hinv1 = Hinv[i1:i2, i1:i2]
-
-            for i in range(count):
-                col = i1 + i
-                w = W1[:, i]
-                d = Hinv1[i, i]
-
-                # refresh the group grid every group_size columns.
-                # NOTE: qparams come from W (block-level error compensation
-                # applied) not W1 (within-block). Matches upstream; exact when
-                # group_size is a multiple of blocksize, which it is for
-                # g128/b128 and g64,g32 nested inside b128.
-                if col % self.group_size == 0:
-                    g_end = min(col + self.group_size, self.columns)
-                    scale, zero = find_qparams(W[:, col:g_end], self.n_bits)
-
-                q = quant_dequant(w.unsqueeze(1), scale, zero, self.n_bits).flatten()
-                Q1[:, i] = q
-
-                total_loss += ((w - q) ** 2 / d ** 2).sum().item() / 2
-                err = (w - q) / d
-                # push this column's error onto the columns still to come
-                W1[:, i:] -= err.unsqueeze(1).matmul(Hinv1[i, i:].unsqueeze(0))
-                Err1[:, i] = err
-
-            Q[:, i1:i2] = Q1
-            W[:, i2:] -= Err1.matmul(Hinv[i1:i2, i2:])
-
-        self.layer.weight.data = Q.to(self.layer.weight.dtype)
-        return total_loss
-
-    def free(self):
-        self.H = None
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-
-
-# --------------------------------------------------------------------------
-# block-sequential driver
-# --------------------------------------------------------------------------
-
-@torch.no_grad()
-def gptq_quantize_model(model, calib_ids, n_bits=4, group_size=128,
-                        percdamp=0.01, blocksize=128, verbose=True):
-    """Quantize every decoder-block Linear in place, block by block.
-
-    model:     a loaded causal LM, ALL ON ONE DEVICE (see note in 04).
-    calib_ids: list of (1, seqlen) LongTensors of calibration token ids.
-
-    lm_head is never touched -- Qwen3 ties it to the input embeddings.
-    """
-    dev = next(model.parameters()).device
-    prev_cache = model.config.use_cache
     model.config.use_cache = False
+    ppl = M.perplexity(model, tok, cfg, seq_len=seq_len, max_windows=max_windows)
 
-    layers = model.model.layers
+    model.config.use_cache = True
+    tps = M.throughput(model, tok, cfg)
 
-    # ---- capture the inputs to block 0 -----------------------------------
-    inps, fwd_kwargs = [], {}
+    vram = M.peak_vram_gb() if use_cuda else 0.0
 
-    class Catcher(torch.nn.Module):
-        def __init__(self, mod):
-            super().__init__()
-            self.mod = mod
+    # Fake-quant lives only in this process, so lm_eval must run against the
+    # live model object rather than reloading from model_id -- same path AWQ
+    # forced on us (transformers won't load AWQ checkpoints without
+    # gptqmodel, which we don't install).
+    tasks = {}
+    if not args.dryrun and not args.skip_tasks:
+        tasks = M.run_lm_eval(model, tok, cfg)
+        print(f"[04] tasks: {tasks}")
 
-        def forward(self, hidden_states, **kwargs):
-            inps.append(hidden_states)
-            # position_embeddings (rotary cos/sin), attention_mask, etc.
-            # These are identical across equal-length batches, so one snapshot
-            # is enough. Cache objects are stateful -- drop them.
-            for k, v in kwargs.items():
-                if "past_key_value" in k or k == "cache_position":
-                    continue
-                fwd_kwargs[k] = v
-            raise _StopForward
+    del model
+    if use_cuda:
+        torch.cuda.empty_cache()
 
-    class _StopForward(Exception):
-        pass
+    config_name = f"gptq-w{args.bits}-g{args.group_size}" + ("-dryrun" if args.dryrun else "")
+    if args.tag:
+        config_name += f"-{args.tag}"
 
-    layers[0] = Catcher(layers[0])
-    for ids in calib_ids:
-        try:
-            model(ids.to(dev))
-        except _StopForward:
-            pass
-    layers[0] = layers[0].mod
+    M.log_result(
+        cfg,
+        config_name=config_name,
+        method="gptq",
+        bits=args.bits,
+        disk_gb="",
+        peak_vram_gb=round(vram, 2),
+        ppl_wikitext2=round(ppl, 3),
+        mmlu=tasks.get("mmlu", ""),
+        gsm8k=tasks.get("gsm8k", ""),
+        tok_per_s=round(tps, 1),
+        notes=f"fake-quant, calib={calib_name} n={nsamples} len={calib_seqlen}, "
+              f"percdamp={args.percdamp}, no act_order"
+              + (f", CPU dry-run on {model_id}" if args.dryrun else ""),
+    )
 
-    if not inps:
-        raise RuntimeError("Catcher captured nothing -- check model.model.layers path")
-    if verbose:
-        print(f"[gptq] captured {len(inps)} calib samples, "
-              f"kwargs={sorted(fwd_kwargs)}")
 
-    outs = [torch.zeros_like(x) for x in inps]
-
-    # ---- walk the blocks -------------------------------------------------
-    for bi, layer in enumerate(layers):
-        subset = {n: m for n, m in layer.named_modules()
-                  if isinstance(m, torch.nn.Linear)}
-
-        gptq = {n: GPTQ(m, n_bits, group_size) for n, m in subset.items()}
-
-        def make_hook(name):
-            def hook(_mod, inp, _out):
-                gptq[name].add_batch(inp[0].data)
-            return hook
-
-        handles = [m.register_forward_hook(make_hook(n)) for n, m in subset.items()]
-        for j, x in enumerate(inps):
-            layer(x, **fwd_kwargs)
-        for h in handles:
-            h.remove()
-
-        losses = {}
-        for n in subset:
-            losses[n] = gptq[n].quantize(percdamp=percdamp, blocksize=blocksize)
-            gptq[n].free()
-
-        # re-run with the QUANTIZED weights so the next block calibrates on
-        # the activations it will actually see. This is where GPTQ's edge
-        # over RTN mostly comes from.
-        for j, x in enumerate(inps):
-            out = layer(x, **fwd_kwargs)
-            outs[j] = out[0] if isinstance(out, tuple) else out
-
-        inps, outs = outs, inps
-
-        if verbose:
-            worst = max(losses, key=losses.get)
-            print(f"[gptq] block {bi:>2}/{len(layers) - 1}  "
-                  f"{len(subset)} linears  worst={worst} ({losses[worst]:.1f})")
-
-    model.config.use_cache = prev_cache
-    return model
+if __name__ == "__main__":
+    main()

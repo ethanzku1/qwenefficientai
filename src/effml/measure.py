@@ -136,6 +136,14 @@ def run_lm_eval(model_or_path, cfg: dict, tokenizer=None) -> dict:
         out[task] = round(float(acc), 4)
     return out
 
+# ---------------------------------------------------------------- reset?
+def reset_vram_counter():
+    if not torch.cuda.is_available():
+        return
+    torch.cuda.init()          # allocator isn't sized until CUDA initializes
+    for d in range(torch.cuda.device_count()):
+        torch.cuda.reset_peak_memory_stats(d)    
+
 # ---------------------------------------------------------------- results log
 def log_result(cfg: dict, **row):
     """Append one configuration's numbers to the shared CSV (git-tracked)."""

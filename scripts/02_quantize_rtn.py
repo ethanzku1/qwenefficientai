@@ -50,6 +50,8 @@ def main():
     parser.add_argument("--bits", type=int, default=4)
     parser.add_argument("--group-size", type=int, default=128)
     parser.add_argument("--tag", default=None, help="suffix for config_name")
+    parser.add_argument("--skip-tasks", action="store_true",
+        help="skip lm_eval (dry-runs / quick plumbing checks)")
     args = parser.parse_args()
 
     cfg = M.load_config()
@@ -102,13 +104,11 @@ def main():
     # harness can evaluate an in-memory model (or we save quantized weights).
     tasks = {}
     if not args.dryrun and not args.skip_tasks:
-        tasks = M.run_lm_eval(model, tok, cfg)   # <-- match your real signature
+        tasks = M.run_lm_eval(model, cfg, tok)
     
     del model
     if use_cuda:
         torch.cuda.empty_cache()
-
-    parser.add_argument("--skip-tasks", action="store_true")
 
     config_name = f"rtn-w{args.bits}-g{args.group_size}" + ("-dryrun" if args.dryrun else "")
     if args.tag:
