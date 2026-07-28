@@ -97,14 +97,18 @@ def main():
 
     vram = M.peak_vram_gb() if use_cuda else 0.0
 
-    del model
-    if use_cuda:
-        torch.cuda.empty_cache()
-
     # NOTE: lm_eval reloads from model_id, i.e. the UNQUANTIZED weights.
     # Fake-quant lives only in this process, so skip tasks here until the
     # harness can evaluate an in-memory model (or we save quantized weights).
     tasks = {}
+    if not args.dryrun and not args.skip_tasks:
+        tasks = M.run_lm_eval(model, tok, cfg)   # <-- match your real signature
+    
+    del model
+    if use_cuda:
+        torch.cuda.empty_cache()
+
+    parser.add_argument("--skip-tasks", action="store_true")
 
     config_name = f"rtn-w{args.bits}-g{args.group_size}" + ("-dryrun" if args.dryrun else "")
     if args.tag:
