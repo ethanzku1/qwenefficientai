@@ -94,7 +94,7 @@ class GPTQ:
         Hinv = torch.linalg.cholesky(H, upper=True)
 
         Q = torch.zeros_like(W)
-        total_loss = 0.0
+        total_loss = torch.zeros((), device=W.device, dtype=torch.float32)
         scale = zero = None
 
         for i1 in range(0, self.columns, blocksize):
@@ -123,7 +123,7 @@ class GPTQ:
                 q = quant_dequant(w.unsqueeze(1), scale, zero, self.n_bits).flatten()
                 Q1[:, i] = q
 
-                total_loss += ((w - q) ** 2 / d ** 2).sum().item() / 2
+                total_loss += ((w - q) ** 2 / d ** 2).sum() / 2
                 err = (w - q) / d
                 # push this column's error onto the columns still to come
                 W1[:, i:] -= err.unsqueeze(1).matmul(Hinv1[i, i:].unsqueeze(0))
@@ -133,7 +133,7 @@ class GPTQ:
             W[:, i2:] -= Err1.matmul(Hinv[i1:i2, i2:])
 
         self.layer.weight.data = Q.to(self.layer.weight.dtype)
-        return total_loss
+        return total_loss.item()
 
     def free(self):
         self.H = None
