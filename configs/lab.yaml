@@ -15,8 +15,8 @@ eval:
   gen_tokens: 256
 
 hardware:
-  max_gpu_mem: "70GiB"        
-  max_cpu_mem: "70GiB"
+  max_gpu_mem: "7GiB"        
+  max_cpu_mem: "24GiB"
 
 awq:
   calib_samples: 128
