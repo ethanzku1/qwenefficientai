@@ -1,4 +1,4 @@
-"""Step 1: BF16 baseline. Every later configuration is compared to this row."""
+"""Step 1: BF16 baseline."""
 import sys
 from pathlib import Path
 

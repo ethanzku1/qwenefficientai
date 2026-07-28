@@ -1,4 +1,4 @@
-"""Step 2: naive round-to-nearest INT4/INT3 fake-quant (the strawman).
+"""Step 2: round-to-nearest INT4/INT3 fake-quant.
 Per-group asymmetric quantization of all Linear layers except lm_head.
 Same measurement suite as the baseline; logs with method="rtn"."""
 import sys
@@ -16,8 +16,6 @@ from effml import measure as M
 
 @torch.no_grad()
 def rtn_quantize_(linear: torch.nn.Linear, n_bits: int = 4, group_size: int = 128) -> bool:
-    """Fake-quantize a Linear's weight in place. Returns True if per-group,
-    False if it fell back to per-channel (in_features not divisible)."""
     W = linear.weight.data
     out_f, in_f = W.shape
     orig_dtype = W.dtype
@@ -98,10 +96,7 @@ def main():
     tps = M.throughput(model, tok, cfg)
 
     vram = M.peak_vram_gb() if use_cuda else 0.0
-
-    # NOTE: lm_eval reloads from model_id, i.e. the UNQUANTIZED weights.
-    # Fake-quant lives only in this process, so skip tasks here until the
-    # harness can evaluate an in-memory model (or we save quantized weights).
+    
     tasks = {}
     if not args.dryrun and not args.skip_tasks:
         tasks = M.run_lm_eval(model, cfg, tok)

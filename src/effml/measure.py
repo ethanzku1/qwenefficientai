@@ -111,7 +111,6 @@ def dir_size_gb(path: str | Path) -> float:
 # ---------------------------------------------------------------- task evals
 def run_lm_eval(model_or_path, cfg: dict, tokenizer=None) -> dict:
     """Run lm-eval harness; returns {task: acc}.
-
     Accepts either a HF model id / local path (str) or an already-loaded
     model object (pass tokenizer too in that case).
     """

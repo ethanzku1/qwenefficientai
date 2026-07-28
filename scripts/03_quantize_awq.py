@@ -1,11 +1,6 @@
-"""Step 3: AWQ quantization with ablations over bit-width and group size.
-
+"""Step 3: AWQ quantization
 Each variant is quantized, saved under models/, fully re-measured with the
 shared harness, and logged as its own row.
-
-Usage:
-    python scripts/03_quantize_awq.py                 # all variants in lab.yaml
-    python scripts/03_quantize_awq.py --only w4-g128  # a single variant
 """
 import argparse
 import sys

@@ -1,11 +1,4 @@
-"""Step 4: GPTQ INT4/INT3 fake-quant (Hessian-aware, error-compensating).
-
-Same measurement suite as 02; logs with method="gptq". Quantization is
-in-memory fake-quant -- no auto-gptq / gptqmodel, whose torch-pinned CUDA
-kernels would displace the pod's NGC torch 2.8.0. Consequence: disk_gb is
-blank and peak_vram_gb measures the BF16 container, exactly as for 02's RTN
-rows. The GPTQ-vs-AWQ comparison here is quality-at-matched-bits.
-
+"""Step 4: GPTQ INT4/INT3.
 Algorithm lives in src/effml/gptq.py.
 """
 import sys
@@ -24,14 +17,6 @@ from effml.gptq import gptq_quantize_model
 
 
 def get_calib(tok, nsamples: int, seqlen: int, seed: int = 0):
-    """Calibration token windows.
-
-    C4, deliberately: AWQ calibrated on pileval, and calibrating GPTQ on
-    wikitext2-train while reporting wikitext2 perplexity would hand GPTQ an
-    in-domain advantage and contaminate the comparison against awq-w4-g128.
-    Falls back to wikitext2 only if C4 can't be fetched -- the fallback is
-    recorded in the results notes so the contamination is never silent.
-    """
     from datasets import load_dataset
 
     calib_name = "c4"
@@ -52,10 +37,7 @@ def get_calib(tok, nsamples: int, seqlen: int, seed: int = 0):
     rng = random.Random(seed)
     order = list(range(len(texts)))
     rng.shuffle(order)
-
-    # Pack: concatenate shuffled docs into a rolling buffer and slice fixed
-    # windows. C4's median doc is far shorter than 2048 tokens, so requiring
-    # one doc per window would both fail and bias toward atypical long docs.
+    
     out, buf, have = [], [], 0
     for i in order:
         ids = tok(texts[i], return_tensors="pt").input_ids[0]
@@ -92,9 +74,13 @@ def main():
     parser.add_argument("--tag", default=None, help="suffix for config_name")
     parser.add_argument("--skip-tasks", action="store_true",
         help="skip lm_eval (dry-runs / quick plumbing checks)")
+    parser.add_argument("--full-tasks", action="store_true",
+        help="ignore eval.task_limit; run full task sets (gold runs)")
     args = parser.parse_args()
 
     cfg = M.load_config()
+    if args.full_tasks:                                               
+        cfg["eval"]["task_limit"] = None                              
     model_id = args.model or cfg["model_id"]
     hw = cfg["hardware"]
     seq_len = 512 if args.dryrun else None
@@ -109,11 +95,6 @@ def main():
 
     if use_cuda:
         M.reset_vram_counter()
-        # NB: device_map={"": 0}, NOT "auto". GPTQ walks decoder blocks
-        # sequentially, feeding block i's outputs into block i+1; if "auto"
-        # shards blocks across GPUs those activations land on the wrong
-        # device. The 4B in BF16 (~8GB) plus activation buffers (~3GB) fits
-        # one A100-80GB with room to spare.
         model = AutoModelForCausalLM.from_pretrained(
             model_id,
             dtype=torch.bfloat16,
@@ -134,10 +115,7 @@ def main():
 
     calib, calib_name = get_calib(tok, nsamples, calib_seqlen)
     print(f"[04] calib: {nsamples} x {calib_seqlen} tokens from {calib_name}")
-
-    # Quantizes every Linear inside the decoder blocks. lm_head is outside
-    # model.model.layers and so is never touched -- same reason as 02: Qwen3
-    # ties lm_head to the input embeddings.
+    
     gptq_quantize_model(
         model,
         calib,
@@ -154,11 +132,7 @@ def main():
     tps = M.throughput(model, tok, cfg)
 
     vram = M.peak_vram_gb() if use_cuda else 0.0
-
-    # Fake-quant lives only in this process, so lm_eval must run against the
-    # live model object rather than reloading from model_id -- same path AWQ
-    # forced on us (transformers won't load AWQ checkpoints without
-    # gptqmodel, which we don't install).
+    
     tasks = {}
     if not args.dryrun and not args.skip_tasks:
         try:
@@ -189,8 +163,9 @@ def main():
         gsm8k=tasks.get("gsm8k", ""),
         tok_per_s=round(tps, 1),
         notes=f"fake-quant, calib={calib_name} n={nsamples} len={calib_seqlen}, "
-              f"percdamp={args.percdamp}, no act_order"
-              + (f", CPU dry-run on {model_id}" if args.dryrun else ""),
+            f"percdamp={args.percdamp}, no act_order"
+            + (f", CPU dry-run on {model_id}" if args.dryrun else "")
+            + (", full task set" if args.full_tasks else ""),
     )
 
 
