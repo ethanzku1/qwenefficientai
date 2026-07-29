@@ -1,16 +1,12 @@
-"""Step 2: round-to-nearest INT4/INT3 fake-quant.
-Per-group asymmetric quantization of all Linear layers except lm_head.
-Same measurement suite as the baseline; logs with method="rtn"."""
+# Step 2: round-to-nearest INT4/INT3 fake-quant.
+# Per-group asymmetric quantization of all Linear layers except lm_head.
+# Same measurement suite as the baseline; logs with method="rtn".
 import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-
 import argparse
-
 import torch
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from transformers import AutoModelForCausalLM, AutoTokenizer
-
 from effml import measure as M
 
 

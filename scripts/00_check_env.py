@@ -1,10 +1,13 @@
-"""Sanity-check the environment before running anything expensive."""
+#Sanity-check the environment
 import shutil
 import sys
 
 import torch
 
-
+# checks for python, pytorch, and cuda
+# if gpu detected retrieves data
+# checks llama.cpp
+# checks disk space
 def main():
     print(f"python      : {sys.version.split()[0]}")
     print(f"torch       : {torch.__version__}")

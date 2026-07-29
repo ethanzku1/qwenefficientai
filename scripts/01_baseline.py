@@ -1,18 +1,15 @@
-"""Step 1: BF16 baseline."""
+#Step 1: BF16 baseline.
 import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-
 import argparse
-
 import torch
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from transformers import AutoModelForCausalLM, AutoTokenizer
-
 from effml import measure as M
 
 
 def main():
+    #customize the run without changing code
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", default=None, help="override config model")
     parser.add_argument("--device", default=None, help="cpu or cuda")
@@ -23,7 +20,7 @@ def main():
     args = parser.parse_args()
 
     cfg = M.load_config()
-    model_id = args.model or cfg["model_id"]          # <-- override actually used
+    model_id = args.model or cfg["model_id"]          #override actually used
     hw = cfg["hardware"]
     seq_len = 512 if args.dryrun else None      # None = use config value
     max_windows = 8 if args.dryrun else None
@@ -45,14 +42,15 @@ def main():
             model_id,
             dtype=torch.bfloat16 if args.dryrun else torch.float32,
         )
+
+    # actual benchmarking
     model.eval()
     model.config.use_cache = False
-
     ppl = M.perplexity(model, tok, cfg, seq_len=seq_len, max_windows=max_windows)
     model.config.use_cache = True
     tps = M.throughput(model, tok, cfg)
     vram = M.peak_vram_gb() if use_cuda else 0.0
-
+    
     if use_cuda:
         devmap = getattr(model, "hf_device_map", None)
         if devmap and any(v in ("cpu", "disk") for v in devmap.values()):
@@ -63,6 +61,7 @@ def main():
     else:
         note = f"CPU dry-run on {model_id}" if args.dryrun else f"CPU run on {model_id}"
 
+    # clears model from memory
     del model
     if use_cuda:
         torch.cuda.empty_cache()
@@ -74,6 +73,7 @@ def main():
     if args.tag:
         config_name += f"-{args.tag}"
 
+    #log the results
     M.log_result(
         cfg,
         config_name=config_name,

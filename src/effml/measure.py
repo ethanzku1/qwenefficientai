@@ -1,8 +1,7 @@
-"""Shared measurement harness.
+# Shared measurement harness.
 
-Every pipeline step imports from here so all configurations are measured
-identically and land in the same results/results.csv.
-"""
+# Every pipeline step imports from here so all configurations are measured
+# identically and land in the same results/results.csv.
 
 from __future__ import annotations
 
@@ -10,11 +9,10 @@ import csv
 import platform
 import socket
 import time
-from datetime import datetime, timezone
-from pathlib import Path
-
 import torch
 import yaml
+from datetime import datetime, timezone
+from pathlib import Path
 
 RESULT_FIELDS = [
     "timestamp", "host", "gpu","model", "config_name", "method", "bits",
@@ -22,22 +20,23 @@ RESULT_FIELDS = [
     "mmlu", "gsm8k", "tok_per_s", "notes",
 ]
 
-
+# reads the yaml file to load the settings for the evaluation
 def load_config(path: str = "configs/lab.yaml") -> dict:
     with open(path) as f:
         return yaml.safe_load(f)
 
-
+#returns gpu name or cpu
 def gpu_name() -> str:
     return torch.cuda.get_device_name(0) if torch.cuda.is_available() else "cpu-only"
 
+# performance metrics --------------------------------------------------
 
-# ---------------------------------------------------------------- perplexity
+# perplexity, evaluates how well the model can read a set of text
 @torch.no_grad()
 def perplexity(model, tokenizer, cfg: dict,
                seq_len: int | None = None,
                max_windows: int | None = None) -> float:
-    """Sliding-window perplexity on WikiText-2 test."""
+    #Sliding-window perplexity on WikiText-2 test.
     from datasets import load_dataset
 
     ecfg = cfg["eval"]
@@ -68,11 +67,9 @@ def perplexity(model, tokenizer, cfg: dict,
             break
     return torch.exp(torch.stack(nlls).sum() / counted).item()
 
-
-# ---------------------------------------------------------------- throughput
+# throughput, measures tok/s (greedy) 
 @torch.no_grad()
 def throughput(model, tokenizer, cfg: dict) -> float:
-    """Tokens/sec on a fixed generation prompt (greedy)."""
     ecfg = cfg["eval"]
     device = next(model.parameters()).device
     ids = tokenizer(ecfg["gen_prompt"], return_tensors="pt").input_ids.to(device)
@@ -87,20 +84,16 @@ def throughput(model, tokenizer, cfg: dict) -> float:
     dt = time.perf_counter() - t0
     return (out.size(1) - ids.size(1)) / dt
 
+# resource monitoring --------------------------------------------------
 
-# ---------------------------------------------------------------- memory/disk
+# checks vram (gb)
 def peak_vram_gb() -> float:
        if not torch.cuda.is_available():
            return 0.0
        return sum(torch.cuda.max_memory_allocated(d)
                   for d in range(torch.cuda.device_count())) / 1e9
 
-def reset_vram_counter():
-   if torch.cuda.is_available():
-       for d in range(torch.cuda.device_count()):
-           torch.cuda.reset_peak_memory_stats(d)
-
-
+# calculates the file size of the directory
 def dir_size_gb(path: str | Path) -> float:
     p = Path(path)
     if not p.exists():
@@ -108,12 +101,12 @@ def dir_size_gb(path: str | Path) -> float:
     return sum(f.stat().st_size for f in p.rglob("*") if f.is_file()) / 1e9
 
 
-# ---------------------------------------------------------------- task evals
+# task evals --------------------------------------------------
+
+# Run lm-eval harness; returns {task: acc}.
+# Accepts either a HF model id / local path (str) or an already-loaded
+# model object (pass tokenizer too in that case).
 def run_lm_eval(model_or_path, cfg: dict, tokenizer=None) -> dict:
-    """Run lm-eval harness; returns {task: acc}.
-    Accepts either a HF model id / local path (str) or an already-loaded
-    model object (pass tokenizer too in that case).
-    """
     import lm_eval
     from lm_eval.models.huggingface import HFLM
 
@@ -135,7 +128,9 @@ def run_lm_eval(model_or_path, cfg: dict, tokenizer=None) -> dict:
         out[task] = round(float(acc), 4)
     return out
 
-# ---------------------------------------------------------------- reset?
+# reset (v2) --------------------------------------------------
+
+# reset pytorch internal memory so can get isolated measurement
 def reset_vram_counter():
     if not torch.cuda.is_available():
         return
@@ -143,9 +138,9 @@ def reset_vram_counter():
     for d in range(torch.cuda.device_count()):
         torch.cuda.reset_peak_memory_stats(d)    
 
-# ---------------------------------------------------------------- results log
+# results log --------------------------------------------------
 def log_result(cfg: dict, **row):
-    """Append one configuration's numbers to the shared CSV (git-tracked)."""
+    # Append one configuration's numbers to the shared CSV (git-tracked).
     path = Path(cfg["paths"]["results_csv"])
     path.parent.mkdir(parents=True, exist_ok=True)
     row.setdefault("timestamp", datetime.now(timezone.utc).isoformat(timespec="seconds"))

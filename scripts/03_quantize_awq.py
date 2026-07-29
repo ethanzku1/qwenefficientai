@@ -1,17 +1,15 @@
-"""Step 3: AWQ quantization
-Each variant is quantized, saved under models/, fully re-measured with the
-shared harness, and logged as its own row.
-"""
+# Step 3: AWQ quantization
+# Each variant is quantized, saved under models/, fully re-measured with the
+# shared harness, and logged as its own row.
+
 import argparse
 import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-
 import torch
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from transformers import AutoModelForCausalLM, AutoTokenizer
-
 from effml import measure as M
+
 
 def quantize_variant(cfg, w_bit: int, group: int) -> Path:
     from awq import AutoAWQForCausalLM
@@ -39,6 +37,7 @@ def quantize_variant(cfg, w_bit: int, group: int) -> Path:
             "version": "GEMM",
         },
     )
+    
     out_dir.parent.mkdir(parents=True, exist_ok=True)
     model.save_quantized(str(out_dir))
     tok.save_pretrained(str(out_dir))

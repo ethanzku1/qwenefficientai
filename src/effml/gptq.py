@@ -1,24 +1,20 @@
-"""GPTQ fake-quantization, hand-rolled.
+# GPTQ fake-quantization, hand-rolled.
 
-No auto-gptq / gptqmodel dependency: quantization happens in-memory on the
-live model, exactly like 02's RTN pass, so the result is evaluated with the
-live-model path in measure.run_lm_eval (the same trick AWQ forced on us).
+# No auto-gptq / gptqmodel dependency: quantization happens in-memory on the
+# live model, exactly like 02's RTN pass, so the result is evaluated with the
+# live-model path in measure.run_lm_eval (the same trick AWQ forced on us).
 
-Reference: Frantar et al., "GPTQ: Accurate Post-Training Quantization for
-Generative Pre-trained Transformers" (2022). Structure follows the original
-IST-DASLab implementation, simplified: no act_order, no packing, fp32 math.
+# Reference: Frantar et al., "GPTQ: Accurate Post-Training Quantization for
+# Generative Pre-trained Transformers" (2022). Structure follows the original
+# IST-DASLab implementation, simplified: no act_order, no packing, fp32 math.
 
-Drop at src/effml/gptq.py
-"""
+# Drop at src/effml/gptq.py
 
 import math
-
 import torch
 
 
-# --------------------------------------------------------------------------
 # shared quant grid  (identical math to 02's rtn_quantize_, factored out)
-# --------------------------------------------------------------------------
 
 def find_qparams(W: torch.Tensor, n_bits: int = 4):
     """Asymmetric min/max grid over the last dim.
@@ -39,10 +35,7 @@ def quant_dequant(W: torch.Tensor, scale, zero, n_bits: int) -> torch.Tensor:
     return (Wq - zero) * scale
 
 
-# --------------------------------------------------------------------------
 # per-Linear GPTQ state
-# --------------------------------------------------------------------------
-
 class GPTQ:
     """Accumulates the Hessian for one Linear, then quantizes it in place."""
 
@@ -141,10 +134,7 @@ class GPTQ:
             torch.cuda.empty_cache()
 
 
-# --------------------------------------------------------------------------
 # block-sequential driver
-# --------------------------------------------------------------------------
-
 @torch.no_grad()
 def gptq_quantize_model(model, calib_ids, n_bits=4, group_size=128,
                         percdamp=0.01, blocksize=128, verbose=True):
@@ -161,7 +151,7 @@ def gptq_quantize_model(model, calib_ids, n_bits=4, group_size=128,
 
     layers = model.model.layers
 
-    # ---- capture the inputs to block 0 -----------------------------------
+    # capture the inputs to block 0
     inps, fwd_kwargs = [], {}
 
     class Catcher(torch.nn.Module):
@@ -199,7 +189,7 @@ def gptq_quantize_model(model, calib_ids, n_bits=4, group_size=128,
 
     outs = [torch.zeros_like(x) for x in inps]
 
-    # ---- walk the blocks -------------------------------------------------
+    # walk the blocks
     for bi, layer in enumerate(layers):
         subset = {n: m for n, m in layer.named_modules()
                   if isinstance(m, torch.nn.Linear)}

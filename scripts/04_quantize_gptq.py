@@ -1,6 +1,6 @@
-"""Step 4: GPTQ INT4/INT3.
-Algorithm lives in src/effml/gptq.py.
-"""
+# Step 4: GPTQ INT4/INT3.
+# Algorithm lives in src/effml/gptq.py.
+
 import sys
 from pathlib import Path
 
