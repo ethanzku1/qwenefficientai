@@ -17,3 +17,5 @@ timestamp,host,gpu,model,config_name,method,bits,disk_gb,peak_vram_gb,ppl_wikite
 2026-07-28T19:25:21+00:00,dc-dgxc-demo-a4-7f9699fb8d-9tssx,NVIDIA A100-SXM4-80GB,Qwen/Qwen3-4B,gptq-w4-g32,gptq,4,,12.36,12.164,0.7053,0.86,23.0,"fake-quant, calib=c4-packed n=128 len=2048, percdamp=0.01, no act_order"
 2026-07-28T20:15:10+00:00,dc-dgxc-demo-a4-7f9699fb8d-9tssx,NVIDIA A100-SXM4-80GB,Qwen/Qwen3-4B,gptq-w3-g128,gptq,3,,12.36,13.5,0.6164,0.655,20.8,"fake-quant, calib=c4-packed n=128 len=2048, percdamp=0.01, no act_order"
 2026-07-28T23:11:47+00:00,dc-dgxc-demo-a4-7f9699fb8d-9tssx,NVIDIA A100-SXM4-80GB,Qwen/Qwen3-4B,gptq-w4-g32-gold,gptq,4,,12.36,12.164,0.6734,0.8469,22.4,"fake-quant, calib=c4-packed n=128 len=2048, percdamp=0.01, no act_order, full task set"
+2026-07-29T00:06:29+00:00,EthansLaptop,cpu-only,Qwen/Qwen3-4B,gguf-q4km-base,gguf-q4km,4,2.5,0.0,,,,16.3,"llama.cpp Q4_K_M CPU, WSL2, n_ctx=4096, pp=53.2 t/s @ 512"
+2026-07-29T00:08:13+00:00,EthansLaptop,cpu-only,Qwen/Qwen3-4B-Instruct-2507,gguf-q4km-instruct,gguf-q4km,4,2.5,0.0,,,,16.3,"llama.cpp Q4_K_M CPU, WSL2, n_ctx=4096, pp=53.0 t/s @ 512"
