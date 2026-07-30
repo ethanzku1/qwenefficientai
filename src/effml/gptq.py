@@ -1,4 +1,4 @@
-# GPTQ fake-quantization, hand-rolled.
+# GPTQ fake-quantization.
 
 # No auto-gptq / gptqmodel dependency: quantization happens in-memory on the
 # live model, exactly like 02's RTN pass, so the result is evaluated with the
