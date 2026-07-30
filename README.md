@@ -1,7 +1,6 @@
 # EfficientML Lab — Compressing Qwen3-4B for Laptop Deployment
 
-TinyML-style lab: apply post-training quantization (RTN / AWQ / GPTQ), pruning,
-and KV-cache quantization to Qwen3-4B, then deploy as GGUF via llama.cpp.
+TinyML-style lab: apply post-training quantization (RTN / AWQ / GPTQ) to Qwen3-4B, then deploy as GGUF via llama.cpp.
 Every experiment appends to a single results table for the final tradeoff analysis.
 
 ## Quick start (any machine)
