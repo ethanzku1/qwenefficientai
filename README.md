@@ -3,14 +3,6 @@
 TinyML-style lab: apply post-training quantization (RTN / AWQ / GPTQ) to Qwen3-4B, then deploy as GGUF via llama.cpp.
 Every experiment appends to a single results table for the final tradeoff analysis.
 
-## Quick start (any machine)
-
-```bash
-git clone <your-repo-url> && cd efficientml-lab
-conda env create -f environment.yml && conda activate efficientml
-python scripts/00_check_env.py            # verifies CUDA, VRAM, package versions
-```
-
 ## Pipeline
 
 | Step | Script | Output |
