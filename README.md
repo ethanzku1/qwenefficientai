@@ -21,7 +21,6 @@ python scripts/00_check_env.py            # verifies CUDA, VRAM, package version
 | 2 | `scripts/02_quantize_rtn.py` | naive round-to-nearest INT4 (strawman) |
 | 3 | `scripts/03_quantize_awq.py` | AWQ W4/W3, group-size ablations |
 | 4 | `scripts/04_quantize_gptq.py` | GPTQ W4 comparison |
-| 5 | `scripts/05_prune.py` | Wanda 50% unstructured / 2:4 sparsity |
 | 6 | `scripts/06_export_gguf.sh` | GGUF conversion + Q4_K_M |
 | 7 | `scripts/07_bench_llamacpp.sh` | GPU vs CPU deployment benchmarks |
 | — | `scripts/make_report.py` | renders `results/results.csv` → markdown table |
